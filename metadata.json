@@ -1,0 +1,5 @@
+{
+  "name": "Prompt Inspector & Editor",
+  "description": "An application to deconstruct, edit, and reconstruct image generation prompts using a structured editor, powered by Gemini. Generate images and iterate on your ideas with precision.",
+  "requestFramePermissions": []
+}
