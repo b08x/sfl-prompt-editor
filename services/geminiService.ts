@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { StructuredPrompt, AnalysisResult } from '../types';
+import { StructuredPrompt, AnalysisResult, PromptVariation } from '../types';
 
 if (!process.env.API_KEY) {
   throw new Error("API_KEY environment variable is not set.");
@@ -164,5 +164,48 @@ export async function analyzeAndRewritePrompt(rawPrompt: string): Promise<Analys
     } catch (error) {
         console.error("Error analyzing and rewriting prompt:", error);
         throw new Error("Failed to analyze and rewrite prompt. Please check the console for details.");
+    }
+}
+
+
+const variationsSchema = {
+    type: Type.OBJECT,
+    properties: {
+      variations: {
+        type: Type.ARRAY,
+        description: "A list of 3-4 creative prompt variations.",
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            id: { type: Type.STRING, description: "A unique ID for the variation, e.g., 'var-1'." },
+            title: { type: Type.STRING, description: "A short, descriptive title for the variation, highlighting the change." },
+            prompt: { type: Type.STRING, description: "The full text of the prompt variation." }
+          },
+          required: ['id', 'title', 'prompt']
+        }
+      }
+    },
+    required: ['variations']
+};
+  
+export async function generatePromptVariations(rawPrompt: string): Promise<PromptVariation[]> {
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: `Generate creative variations for this image prompt: "${rawPrompt}"`,
+            config: {
+                systemInstruction: "You are a creative assistant for an image generation tool. Given a prompt, your job is to generate 3-4 distinct and creative variations. The variations should explore different artistic styles, moods, compositions, or subject interpretations while retaining the core subject matter. Adhere strictly to the provided JSON schema.",
+                responseMimeType: "application/json",
+                responseSchema: variationsSchema
+            },
+        });
+
+        const jsonString = response.text.trim();
+        const parsed = JSON.parse(jsonString);
+        return (parsed.variations || []) as PromptVariation[];
+
+    } catch (error) {
+        console.error("Error generating prompt variations:", error);
+        throw new Error("Failed to generate prompt variations. Please check the console for details.");
     }
 }

@@ -3,9 +3,13 @@ import { CanvasPanel } from './components/CanvasPanel';
 import { HistoryFilmstrip } from './components/HistoryFilmstrip';
 import { StructuredBreakdown } from './components/StructuredEditor';
 import { AnalysisSuggestions } from './components/AnalysisPanel';
-import { StructuredPrompt, GenerationHistoryItem, AnalysisTag, RewriteCandidate } from './types';
-import { generateImage, deconstructPrompt, analyzeAndRewritePrompt } from './services/geminiService';
-import { SparklesIcon } from './components/icons';
+import { SavedPromptsPanel } from './components/SavedPromptsPanel';
+import { VariationsPanel } from './components/VariationsPanel';
+import { StructuredPrompt, GenerationHistoryItem, AnalysisTag, RewriteCandidate, SavedPromptItem, PromptVariation } from './types';
+import { generateImage, deconstructPrompt, analyzeAndRewritePrompt, generatePromptVariations } from './services/geminiService';
+import { SparklesIcon, BookmarkIcon, BeakerIcon } from './components/icons';
+import { useHistoryState } from './hooks/useHistoryState';
+import { useLocalStorage } from './hooks/useLocalStorage';
 
 const initialRawPrompt = `A political cartoon of Donald Trump being disciplined by Abraham Lincoln with a paddle labeled 'Democracy' near the White House. Tone: satirical.`;
 
@@ -32,7 +36,16 @@ const constructRawPrompt = (prompt: StructuredPrompt): string => {
 };
 
 function App() {
-  const [prompt, setPrompt] = useState<StructuredPrompt>(initialPromptState);
+  const { 
+    state: prompt, 
+    setState: setPrompt, 
+    undo: undoPrompt, 
+    redo: redoPrompt, 
+    canUndo: canUndoPrompt, 
+    canRedo: canRedoPrompt,
+    resetState: resetPromptState
+  } = useHistoryState<StructuredPrompt>(initialPromptState);
+
   const [rawPrompt, setRawPrompt] = useState<string>(initialRawPrompt);
   const [history, setHistory] = useState<GenerationHistoryItem[]>([]);
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
@@ -43,6 +56,10 @@ function App() {
   const [analysis, setAnalysis] = useState<AnalysisTag[]>([]);
   const [candidates, setCandidates] = useState<RewriteCandidate[]>([]);
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
+  
+  const [savedPrompts, setSavedPrompts] = useLocalStorage<SavedPromptItem[]>('prompt-inspector-saved', []);
+  const [variations, setVariations] = useState<PromptVariation[]>([]);
+  const [isGeneratingVariations, setIsGeneratingVariations] = useState<boolean>(false);
 
   useEffect(() => {
     const initApp = async () => {
@@ -55,7 +72,7 @@ function App() {
           deconstructPrompt(initialRawPrompt),
           analyzeAndRewritePrompt(initialRawPrompt)
         ]);
-        setPrompt(structured);
+        resetPromptState(structured);
         setAnalysis(result.analysis);
         setCandidates(result.candidates);
         if (result.candidates.length > 0) {
@@ -69,6 +86,7 @@ function App() {
       }
     };
     initApp();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -87,6 +105,7 @@ function App() {
 
     setIsLoading(true);
     setError(null);
+    setVariations([]);
     
     try {
       setLoadingMessage("Analyzing...");
@@ -94,7 +113,7 @@ function App() {
           deconstructPrompt(rawPrompt),
           analyzeAndRewritePrompt(rawPrompt)
       ]);
-      setPrompt(structured);
+      resetPromptState(structured);
       setAnalysis(analysisResult.analysis);
       setCandidates(analysisResult.candidates);
 
@@ -119,27 +138,138 @@ function App() {
       setIsLoading(false);
       setLoadingMessage("Generate");
     }
-  }, [rawPrompt]);
+  }, [rawPrompt, resetPromptState]);
 
-  const handleApplyRewrite = useCallback(() => {
+  const handleApplyRewrite = useCallback(async () => {
     if (!selectedCandidateId) return;
     const selected = candidates.find(c => c.id === selectedCandidateId);
     if (selected) {
         setRawPrompt(selected.text);
+        setVariations([]);
+        // Deconstruct the newly applied prompt to update the structured editor
+        try {
+            setIsLoading(true);
+            setLoadingMessage("Analyzing...");
+            const structured = await deconstructPrompt(selected.text);
+            resetPromptState(structured);
+        } catch(e) {
+            setError(e instanceof Error ? e.message : String(e));
+        } finally {
+            setIsLoading(false);
+            setLoadingMessage("Generate");
+        }
     }
-  }, [selectedCandidateId, candidates]);
+  }, [selectedCandidateId, candidates, resetPromptState]);
 
   const handleSelectHistoryItem = (index: number) => {
     setSelectedIndex(index);
     const selectedItem = history[index];
     if (selectedItem) {
-      setPrompt(selectedItem.prompt);
+      resetPromptState(selectedItem.prompt);
       setRawPrompt(selectedItem.rawPrompt);
+      setVariations([]);
     }
   };
   
+  const handleSavePrompt = () => {
+    const trimmedRawPrompt = rawPrompt.trim();
+    if (!trimmedRawPrompt) {
+        setError("Cannot save an empty prompt.");
+        return;
+    }
+    if (savedPrompts.some(p => p.rawPrompt === trimmedRawPrompt)) {
+        setError("This prompt is already saved.");
+        return;
+    }
+
+    const name = trimmedRawPrompt.split(' ').slice(0, 5).join(' ') + (trimmedRawPrompt.split(' ').length > 5 ? '...' : '');
+    const newSavedItem: SavedPromptItem = {
+        id: new Date().toISOString(),
+        name: name,
+        rawPrompt: trimmedRawPrompt,
+        prompt: prompt,
+    };
+    setSavedPrompts(prev => [newSavedItem, ...prev]);
+  };
+
+  const handleLoadPrompt = useCallback(async (savedItem: SavedPromptItem) => {
+    setIsLoading(true);
+    setLoadingMessage("Loading...");
+    setError(null);
+    setVariations([]);
+    try {
+        setRawPrompt(savedItem.rawPrompt);
+        resetPromptState(savedItem.prompt);
+
+        const result = await analyzeAndRewritePrompt(savedItem.rawPrompt);
+        setAnalysis(result.analysis);
+        setCandidates(result.candidates);
+        if (result.candidates.length > 0) {
+            setSelectedCandidateId(result.candidates[0].id);
+        }
+    } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+    } finally {
+        setIsLoading(false);
+        setLoadingMessage("Generate");
+    }
+  }, [resetPromptState]);
+
+  const handleDeletePrompt = (idToDelete: string) => {
+    setSavedPrompts(prev => prev.filter(p => p.id !== idToDelete));
+  };
+
+  const handleGenerateVariations = useCallback(async () => {
+    const trimmedPrompt = rawPrompt.trim();
+    if (!trimmedPrompt) {
+      setError("Please provide a prompt to generate variations.");
+      return;
+    }
+    setIsGeneratingVariations(true);
+    setError(null);
+    setVariations([]);
+    try {
+      const result = await generatePromptVariations(trimmedPrompt);
+      setVariations(result);
+    } catch(e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setIsGeneratingVariations(false);
+    }
+  }, [rawPrompt]);
+
+  const handleSelectVariation = useCallback(async (promptText: string) => {
+    setIsLoading(true);
+    setLoadingMessage("Loading...");
+    setError(null);
+    try {
+        setRawPrompt(promptText);
+        setVariations([]);
+
+        const [structured, result] = await Promise.all([
+            deconstructPrompt(promptText),
+            analyzeAndRewritePrompt(promptText),
+        ]);
+
+        resetPromptState(structured);
+        setAnalysis(result.analysis);
+        setCandidates(result.candidates);
+        if (result.candidates.length > 0) {
+            setSelectedCandidateId(result.candidates[0].id);
+        }
+    } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+    } finally {
+        setIsLoading(false);
+        setLoadingMessage("Generate");
+    }
+  }, [resetPromptState]);
+
+
   useEffect(() => {
     const constructed = constructRawPrompt(prompt);
+    // This effect can cause race conditions if the user is typing in the raw prompt box
+    // at the same time the structured prompt is changing. For now, we assume one user action at a time.
     setRawPrompt(constructed);
   }, [prompt]);
 
@@ -169,19 +299,51 @@ function App() {
               className="w-full flex-grow bg-gray-700 border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white p-3 resize-none"
               rows={5}
             />
-            <button
-              onClick={handleGenerate}
-              disabled={isLoading}
-              className="w-full flex justify-center items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300 disabled:bg-indigo-400 disabled:cursor-not-allowed"
-            >
-              <SparklesIcon className={`w-5 h-5 ${isLoading ? 'animate-pulse-fast' : ''}`} />
-              <span>{loadingMessage}</span>
-            </button>
+            <div className="flex items-center space-x-2">
+                <button
+                onClick={handleGenerate}
+                disabled={isLoading}
+                className="w-full flex justify-center items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300 disabled:bg-indigo-400 disabled:cursor-not-allowed"
+                >
+                <SparklesIcon className={`w-5 h-5 ${isLoading && loadingMessage === 'Generating...' ? 'animate-pulse-fast' : ''}`} />
+                <span>{loadingMessage}</span>
+                </button>
+                 <button
+                    onClick={handleGenerateVariations}
+                    disabled={isLoading || isGeneratingVariations}
+                    title="Generate Variations"
+                    className="p-3 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition duration-300 disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed"
+                >
+                    <BeakerIcon className={`w-5 h-5 ${isGeneratingVariations ? 'animate-pulse-fast' : ''}`} />
+                </button>
+                <button
+                    onClick={handleSavePrompt}
+                    disabled={isLoading}
+                    title="Save Current Prompt"
+                    className="p-3 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition duration-300 disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed"
+                >
+                    <BookmarkIcon />
+                </button>
+            </div>
           </div>
           
+          <SavedPromptsPanel
+            savedPrompts={savedPrompts}
+            onLoadPrompt={handleLoadPrompt}
+            onDeletePrompt={handleDeletePrompt}
+          />
+          <VariationsPanel
+            variations={variations}
+            onSelectVariation={handleSelectVariation}
+            isLoading={isGeneratingVariations}
+          />
           <StructuredBreakdown 
             prompt={prompt}
             setPrompt={setPrompt}
+            undo={undoPrompt}
+            redo={redoPrompt}
+            canUndo={canUndoPrompt}
+            canRedo={canRedoPrompt}
           />
           <AnalysisSuggestions
             analysis={analysis}
@@ -192,7 +354,7 @@ function App() {
           />
         </div>
         <div className="md:col-span-2 flex flex-col space-y-4">
-          <CanvasPanel imageUrl={currentImageUrl} isLoading={isLoading} />
+          <CanvasPanel imageUrl={currentImageUrl} isLoading={isLoading && loadingMessage === 'Generating...'} />
           <HistoryFilmstrip history={history} onSelect={handleSelectHistoryItem} selectedIndex={selectedIndex} />
         </div>
       </main>

@@ -1,10 +1,14 @@
 import React from 'react';
 import { StructuredPrompt } from '../types';
-import { PlusIcon, TrashIcon } from './icons';
+import { PlusIcon, TrashIcon, UndoIcon, RedoIcon } from './icons';
 
 interface StructuredBreakdownProps {
   prompt: StructuredPrompt;
   setPrompt: React.Dispatch<React.SetStateAction<StructuredPrompt>>;
+  undo: () => void;
+  redo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
 }
 
 const InputField = ({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; placeholder: string }) => (
@@ -20,7 +24,7 @@ const InputField = ({ label, value, onChange, placeholder }: { label: string; va
   </div>
 );
 
-export const StructuredBreakdown: React.FC<StructuredBreakdownProps> = ({ prompt, setPrompt }) => {
+export const StructuredBreakdown: React.FC<StructuredBreakdownProps> = ({ prompt, setPrompt, undo, redo, canUndo, canRedo }) => {
   const handleFrameChange = (field: 'style' | 'tone') => (e: React.ChangeEvent<HTMLInputElement>) => {
     setPrompt(p => ({ ...p, frame: { ...p.frame, [field]: e.target.value } }));
   };
@@ -52,8 +56,26 @@ export const StructuredBreakdown: React.FC<StructuredBreakdownProps> = ({ prompt
 
   return (
     <details className="bg-gray-800 rounded-lg" open>
-      <summary className="p-4 cursor-pointer font-semibold text-lg text-indigo-400 w-full text-left">
-        Structured Breakdown
+      <summary className="p-4 cursor-pointer font-semibold text-lg text-indigo-400 w-full flex justify-between items-center">
+        <span>Structured Breakdown</span>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={(e) => { e.preventDefault(); undo(); }}
+            disabled={!canUndo}
+            className="p-1 rounded-md text-gray-400 hover:bg-gray-700 hover:text-white disabled:text-gray-600 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+            aria-label="Undo change"
+          >
+            <UndoIcon />
+          </button>
+          <button
+            onClick={(e) => { e.preventDefault(); redo(); }}
+            disabled={!canRedo}
+            className="p-1 rounded-md text-gray-400 hover:bg-gray-700 hover:text-white disabled:text-gray-600 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+            aria-label="Redo change"
+          >
+            <RedoIcon />
+          </button>
+        </div>
       </summary>
       <div className="space-y-6 p-4 border-t border-gray-700">
         <div className="space-y-4">

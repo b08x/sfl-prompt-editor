@@ -25,6 +25,19 @@ export interface GenerationHistoryItem {
   rawPrompt: string;
 }
 
+export interface SavedPromptItem {
+  id: string;
+  name: string;
+  rawPrompt: string;
+  prompt: StructuredPrompt;
+}
+
+export interface PromptVariation {
+  id: string;
+  title: string;
+  prompt: string;
+}
+
 export type EditorTab = 'structured' | 'raw' | 'analysis';
 
 export type AnalysisCategory = "entity" | "process" | "tone" | "risk" | "other";
