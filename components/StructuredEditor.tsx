@@ -1,12 +1,10 @@
 import React from 'react';
-import { StructuredPrompt, Subject } from '../types';
-import { PlusIcon, TrashIcon, SparklesIcon } from './icons';
+import { StructuredPrompt } from '../types';
+import { PlusIcon, TrashIcon } from './icons';
 
-interface StructuredEditorProps {
+interface StructuredBreakdownProps {
   prompt: StructuredPrompt;
   setPrompt: React.Dispatch<React.SetStateAction<StructuredPrompt>>;
-  onGenerate: () => void;
-  isLoading: boolean;
 }
 
 const InputField = ({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; placeholder: string }) => (
@@ -22,7 +20,7 @@ const InputField = ({ label, value, onChange, placeholder }: { label: string; va
   </div>
 );
 
-export const StructuredEditor: React.FC<StructuredEditorProps> = ({ prompt, setPrompt, onGenerate, isLoading }) => {
+export const StructuredBreakdown: React.FC<StructuredBreakdownProps> = ({ prompt, setPrompt }) => {
   const handleFrameChange = (field: 'style' | 'tone') => (e: React.ChangeEvent<HTMLInputElement>) => {
     setPrompt(p => ({ ...p, frame: { ...p.frame, [field]: e.target.value } }));
   };
@@ -53,48 +51,44 @@ export const StructuredEditor: React.FC<StructuredEditorProps> = ({ prompt, setP
   };
 
   return (
-    <div className="space-y-6 p-4">
-      <div className="space-y-4 p-4 bg-gray-800 rounded-lg">
-        <h3 className="text-lg font-semibold text-indigo-400">FRAME</h3>
-        <InputField label="Style / Genre" value={prompt.frame.style} onChange={handleFrameChange('style')} placeholder="e.g., Photorealistic photo, 3D render" />
-        <InputField label="Tone / Mood" value={prompt.frame.tone} onChange={handleFrameChange('tone')} placeholder="e.g., Satirical, Humorous, Epic" />
-      </div>
+    <details className="bg-gray-800 rounded-lg" open>
+      <summary className="p-4 cursor-pointer font-semibold text-lg text-indigo-400 w-full text-left">
+        Structured Breakdown
+      </summary>
+      <div className="space-y-6 p-4 border-t border-gray-700">
+        <div className="space-y-4">
+          <h3 className="text-base font-semibold text-gray-300">FRAME</h3>
+          <InputField label="Style / Genre" value={prompt.frame.style} onChange={handleFrameChange('style')} placeholder="e.g., Photorealistic photo, 3D render" />
+          <InputField label="Tone / Mood" value={prompt.frame.tone} onChange={handleFrameChange('tone')} placeholder="e.g., Satirical, Humorous, Epic" />
+        </div>
 
-      <div className="space-y-4 p-4 bg-gray-800 rounded-lg">
-        <h3 className="text-lg font-semibold text-indigo-400">SCENE</h3>
-        {prompt.scene.subjects.map((subject, index) => (
-          <div key={index} className="p-3 border border-gray-700 rounded-md space-y-3 relative">
-            <p className="text-sm font-medium text-gray-400">Subject {index + 1}</p>
-            <InputField label="Main Subject" value={subject.name} onChange={handleSubjectChange(index, 'name')} placeholder="e.g., Donald Trump, a robot" />
-            <InputField label="...as / with Attribute" value={subject.attribute} onChange={handleSubjectChange(index, 'attribute')} placeholder="e.g., as a petulant child" />
-            {prompt.scene.subjects.length > 1 && (
-              <button onClick={() => removeSubject(index)} className="absolute top-2 right-2 text-gray-500 hover:text-red-400">
-                <TrashIcon />
-              </button>
-            )}
-          </div>
-        ))}
-         <button onClick={addSubject} className="flex items-center space-x-2 text-sm text-indigo-400 hover:text-indigo-300">
-          <PlusIcon />
-          <span>Add Subject</span>
-        </button>
-        <InputField label="Action / Process" value={prompt.scene.action} onChange={handleSceneChange('action')} placeholder="e.g., is disciplining, sits on" />
-      </div>
+        <div className="space-y-4">
+          <h3 className="text-base font-semibold text-gray-300">SCENE</h3>
+          {prompt.scene.subjects.map((subject, index) => (
+            <div key={index} className="p-3 border border-gray-700 rounded-md space-y-3 relative bg-gray-900/50">
+              <p className="text-sm font-medium text-gray-400">Subject {index + 1}</p>
+              <InputField label="Main Subject" value={subject.name} onChange={handleSubjectChange(index, 'name')} placeholder="e.g., Donald Trump, a robot" />
+              <InputField label="...as / with Attribute" value={subject.attribute} onChange={handleSubjectChange(index, 'attribute')} placeholder="e.g., as a petulant child" />
+              {prompt.scene.subjects.length > 1 && (
+                <button onClick={() => removeSubject(index)} className="absolute top-2 right-2 text-gray-500 hover:text-red-400">
+                  <TrashIcon />
+                </button>
+              )}
+            </div>
+          ))}
+          <button onClick={addSubject} className="flex items-center space-x-2 text-sm text-indigo-400 hover:text-indigo-300">
+            <PlusIcon />
+            <span>Add Subject</span>
+          </button>
+          <InputField label="Action / Process" value={prompt.scene.action} onChange={handleSceneChange('action')} placeholder="e.g., is disciplining, sits on" />
+        </div>
 
-      <div className="space-y-4 p-4 bg-gray-800 rounded-lg">
-        <h3 className="text-lg font-semibold text-indigo-400">CONTEXT</h3>
-        <InputField label="Setting / Location" value={prompt.context.setting} onChange={handleContextChange('setting')} placeholder="e.g., on the White House lawn" />
-        <InputField label="Key Objects / Details" value={prompt.context.details} onChange={handleContextChange('details')} placeholder="e.g., a broken gavel, lens flare" />
+        <div className="space-y-4">
+          <h3 className="text-base font-semibold text-gray-300">CONTEXT</h3>
+          <InputField label="Setting / Location" value={prompt.context.setting} onChange={handleContextChange('setting')} placeholder="e.g., on the White House lawn" />
+          <InputField label="Key Objects / Details" value={prompt.context.details} onChange={handleContextChange('details')} placeholder="e.g., a broken gavel, lens flare" />
+        </div>
       </div>
-
-       <button
-        onClick={onGenerate}
-        disabled={isLoading}
-        className="w-full flex justify-center items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300 disabled:bg-indigo-400 disabled:cursor-not-allowed"
-      >
-        <SparklesIcon className="w-5 h-5"/>
-        <span>{isLoading ? 'Generating...' : 'Generate'}</span>
-      </button>
-    </div>
+    </details>
   );
 };

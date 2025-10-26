@@ -1,22 +1,19 @@
 import React, { useState, useCallback, useEffect } from 'react';
-import { EditorPanel } from './components/EditorPanel';
 import { CanvasPanel } from './components/CanvasPanel';
 import { HistoryFilmstrip } from './components/HistoryFilmstrip';
-import { StructuredPrompt, GenerationHistoryItem, AnalysisTag, RewriteCandidate, EditorTab } from './types';
+import { StructuredBreakdown } from './components/StructuredEditor';
+import { AnalysisSuggestions } from './components/AnalysisPanel';
+import { StructuredPrompt, GenerationHistoryItem, AnalysisTag, RewriteCandidate } from './types';
 import { generateImage, deconstructPrompt, analyzeAndRewritePrompt } from './services/geminiService';
 import { SparklesIcon } from './components/icons';
 
-// This prompt is intentionally chosen to be complex and potentially sensitive
-// to demonstrate the analysis and rewrite capabilities of the application upon loading.
 const initialRawPrompt = `A political cartoon of Donald Trump being disciplined by Abraham Lincoln with a paddle labeled 'Democracy' near the White House. Tone: satirical.`;
 
-// The structured prompt starts empty and will be populated by deconstructing the initial raw prompt.
 const initialPromptState: StructuredPrompt = {
   frame: { style: '', tone: '' },
   scene: { subjects: [{ name: '', attribute: '' }], action: '' },
   context: { setting: '', details: '' },
 };
-
 
 const constructRawPrompt = (prompt: StructuredPrompt): string => {
     const stylePart = prompt.frame.style ? `A ${prompt.frame.style}` : 'An image';
@@ -40,50 +37,39 @@ function App() {
   const [history, setHistory] = useState<GenerationHistoryItem[]>([]);
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [isDeconstructing, setIsDeconstructing] = useState<boolean>(false);
-  const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
+  const [loadingMessage, setLoadingMessage] = useState<string>('Generate');
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<EditorTab>('structured');
 
   const [analysis, setAnalysis] = useState<AnalysisTag[]>([]);
   const [candidates, setCandidates] = useState<RewriteCandidate[]>([]);
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
-  
-  // This effect runs once on mount to initialize the application state
-  // by deconstructing and analyzing the initial prompt.
+
   useEffect(() => {
     const initApp = async () => {
-      // We start in a loading state for both processes
-      setIsDeconstructing(true);
-      setIsAnalyzing(true);
+      setIsLoading(true);
+      setLoadingMessage("Analyzing...");
       setError(null);
       
       try {
-        // First, deconstruct the raw prompt into the structured editor
-        const structured = await deconstructPrompt(initialRawPrompt);
+        const [structured, result] = await Promise.all([
+          deconstructPrompt(initialRawPrompt),
+          analyzeAndRewritePrompt(initialRawPrompt)
+        ]);
         setPrompt(structured);
-        
-        // Then, analyze the prompt for risks and generate rewrites
-        const result = await analyzeAndRewritePrompt(initialRawPrompt);
         setAnalysis(result.analysis);
         setCandidates(result.candidates);
         if (result.candidates.length > 0) {
             setSelectedCandidateId(result.candidates[0].id);
         }
-        
-        // Finally, switch to the analysis tab to show the results immediately
-        setActiveTab('analysis');
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       } finally {
-        // Ensure loading states are cleared
-        setIsDeconstructing(false);
-        setIsAnalyzing(false);
+        setIsLoading(false);
+        setLoadingMessage("Generate");
       }
     };
-
     initApp();
-  }, []); // Empty dependency array ensures this runs only once on mount
+  }, []);
 
   useEffect(() => {
     if (error) {
@@ -92,87 +78,46 @@ function App() {
     }
   }, [error]);
   
-  const handleGenerate = useCallback(async (promptToUse: string) => {
-    const trimmedPrompt = promptToUse.trim();
+  const handleGenerate = useCallback(async () => {
+    const trimmedPrompt = rawPrompt.trim();
     if (!trimmedPrompt || trimmedPrompt === "A blank canvas.") {
-      setError("Please provide a more descriptive prompt to generate an image.");
+      setError("Please provide a descriptive prompt to generate an image.");
       return;
     }
 
     setIsLoading(true);
     setError(null);
+    
     try {
+      setLoadingMessage("Analyzing...");
+      const [structured, analysisResult] = await Promise.all([
+          deconstructPrompt(rawPrompt),
+          analyzeAndRewritePrompt(rawPrompt)
+      ]);
+      setPrompt(structured);
+      setAnalysis(analysisResult.analysis);
+      setCandidates(analysisResult.candidates);
+
+      setLoadingMessage("Generating...");
       const imageUrl = await generateImage(trimmedPrompt);
       const newHistoryItem: GenerationHistoryItem = {
         id: new Date().toISOString(),
         imageUrl,
-        prompt: prompt, // Use the current structured prompt for history
+        prompt: structured,
         rawPrompt: trimmedPrompt
       };
       setHistory(prev => [newHistoryItem, ...prev]);
       setSelectedIndex(0);
+
     } catch (e) {
       let errorMessage = e instanceof Error ? e.message : String(e);
-      // If the error is a safety block, provide a more helpful message and guide the user.
       if (errorMessage.includes("blocked for safety reasons")) {
-          errorMessage += " Try using the 'Analysis' tab to get safer rewrite suggestions.";
-          setActiveTab('analysis'); // Switch to the analysis tab to help them
+          errorMessage += " Review the analysis for safer rewrite suggestions.";
       }
       setError(errorMessage);
     } finally {
       setIsLoading(false);
-    }
-  }, [prompt, setActiveTab]);
-
-  const handleGenerateFromStructured = useCallback(() => {
-    const constructedPrompt = constructRawPrompt(prompt);
-    setRawPrompt(constructedPrompt);
-    handleGenerate(constructedPrompt);
-  }, [prompt, handleGenerate]);
-
-  const handleGenerateFromRaw = useCallback(() => {
-    handleGenerate(rawPrompt);
-  }, [rawPrompt, handleGenerate]);
-
-  const handleDeconstruct = useCallback(async () => {
-    if (!rawPrompt.trim()) {
-      setError("Cannot deconstruct an empty prompt.");
-      return;
-    }
-    setIsDeconstructing(true);
-    setError(null);
-    try {
-      const structured = await deconstructPrompt(rawPrompt);
-      setPrompt(structured);
-      setActiveTab('structured');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setIsDeconstructing(false);
-    }
-  }, [rawPrompt]);
-
-  const handleAnalyze = useCallback(async () => {
-    if (!rawPrompt.trim()) {
-        setError("Cannot analyze an empty prompt.");
-        return;
-    }
-    setIsAnalyzing(true);
-    setError(null);
-    setAnalysis([]);
-    setCandidates([]);
-    setSelectedCandidateId(null);
-    try {
-        const result = await analyzeAndRewritePrompt(rawPrompt);
-        setAnalysis(result.analysis);
-        setCandidates(result.candidates);
-        if (result.candidates.length > 0) {
-            setSelectedCandidateId(result.candidates[0].id);
-        }
-    } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
-    } finally {
-        setIsAnalyzing(false);
+      setLoadingMessage("Generate");
     }
   }, [rawPrompt]);
 
@@ -181,7 +126,6 @@ function App() {
     const selected = candidates.find(c => c.id === selectedCandidateId);
     if (selected) {
         setRawPrompt(selected.text);
-        setActiveTab('raw');
     }
   }, [selectedCandidateId, candidates]);
 
@@ -194,13 +138,10 @@ function App() {
     }
   };
   
-  // Sync raw prompt when structured prompt changes
   useEffect(() => {
-    if(activeTab === 'structured') {
-        const constructed = constructRawPrompt(prompt);
-        setRawPrompt(constructed);
-    }
-  }, [prompt, activeTab]);
+    const constructed = constructRawPrompt(prompt);
+    setRawPrompt(constructed);
+  }, [prompt]);
 
   const currentImageUrl = history.length > 0 ? history[selectedIndex]?.imageUrl : null;
 
@@ -218,24 +159,34 @@ function App() {
       )}
 
       <main className="flex-grow grid grid-cols-1 md:grid-cols-3 gap-4 p-4">
-        <div className="md:col-span-1 h-[calc(100vh-100px)] min-h-[500px]">
-          <EditorPanel 
+        <div className="md:col-span-1 h-[calc(100vh-100px)] min-h-[500px] flex flex-col space-y-4 overflow-y-auto">
+          <div className="bg-gray-800 rounded-lg p-4 flex flex-col space-y-4">
+            <h2 className="text-lg font-semibold text-white">Prompt</h2>
+            <textarea
+              value={rawPrompt}
+              onChange={(e) => setRawPrompt(e.target.value)}
+              placeholder="Enter your prompt here..."
+              className="w-full flex-grow bg-gray-700 border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white p-3 resize-none"
+              rows={5}
+            />
+            <button
+              onClick={handleGenerate}
+              disabled={isLoading}
+              className="w-full flex justify-center items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300 disabled:bg-indigo-400 disabled:cursor-not-allowed"
+            >
+              <SparklesIcon className={`w-5 h-5 ${isLoading ? 'animate-pulse-fast' : ''}`} />
+              <span>{loadingMessage}</span>
+            </button>
+          </div>
+          
+          <StructuredBreakdown 
             prompt={prompt}
             setPrompt={setPrompt}
-            rawPrompt={rawPrompt}
-            setRawPrompt={setRawPrompt}
-            onGenerateFromStructured={handleGenerateFromStructured}
-            onGenerateFromRaw={handleGenerateFromRaw}
-            onDeconstruct={handleDeconstruct}
-            onAnalyze={handleAnalyze}
-            onApplyRewrite={handleApplyRewrite}
-            isLoading={isLoading}
-            isDeconstructing={isDeconstructing}
-            isAnalyzing={isAnalyzing}
-            activeTab={activeTab}
-            setActiveTab={setActiveTab}
+          />
+          <AnalysisSuggestions
             analysis={analysis}
             candidates={candidates}
+            onApplyRewrite={handleApplyRewrite}
             selectedCandidateId={selectedCandidateId}
             setSelectedCandidateId={setSelectedCandidateId}
           />
