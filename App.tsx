@@ -11,7 +11,7 @@ import { SparklesIcon, BookmarkIcon, BeakerIcon } from './components/icons';
 import { useHistoryState } from './hooks/useHistoryState';
 import { useLocalStorage } from './hooks/useLocalStorage';
 
-const initialRawPrompt = `A political cartoon of Donald Trump being disciplined by Abraham Lincoln with a paddle labeled 'Democracy' near the White House. Tone: satirical.`;
+const initialRawPrompt = `A cinematic, wide-angle shot of a lone astronaut discovering a glowing, ancient alien artifact in a vast, red desert on Mars. The astronaut's helmet reflects the mysterious light of the object. Dramatic, epic tone.`;
 
 const initialPromptState: StructuredPrompt = {
   frame: { style: '', tone: '' },
