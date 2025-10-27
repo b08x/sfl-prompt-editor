@@ -11,7 +11,7 @@ interface StructuredBreakdownProps {
   canRedo: boolean;
 }
 
-const InputField = ({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; placeholder: string }) => (
+const InputField = ({ label, value, onChange, placeholder, tooltip }: { label: string; value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; placeholder: string; tooltip?: string; }) => (
   <div>
     <label className="block text-sm font-medium text-gray-400 mb-1">{label}</label>
     <input
@@ -19,6 +19,7 @@ const InputField = ({ label, value, onChange, placeholder }: { label: string; va
       value={value}
       onChange={onChange}
       placeholder={placeholder}
+      title={tooltip}
       className="w-full bg-gray-700 border-gray-600 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-white px-3 py-2"
     />
   </div>
@@ -80,8 +81,20 @@ export const StructuredBreakdown: React.FC<StructuredBreakdownProps> = ({ prompt
       <div className="space-y-6 p-4 border-t border-gray-700">
         <div className="space-y-4">
           <h3 className="text-base font-semibold text-gray-300">FRAME</h3>
-          <InputField label="Style / Genre" value={prompt.frame.style} onChange={handleFrameChange('style')} placeholder="e.g., Photorealistic photo, 3D render" />
-          <InputField label="Tone / Mood" value={prompt.frame.tone} onChange={handleFrameChange('tone')} placeholder="e.g., Satirical, Humorous, Epic" />
+          <InputField 
+            label="Style / Genre" 
+            value={prompt.frame.style} 
+            onChange={handleFrameChange('style')} 
+            placeholder="e.g., Photorealistic photo, 3D render" 
+            tooltip="The overall artistic style, genre, or medium (e.g., 'Photorealistic photo', 'Oil painting')." 
+          />
+          <InputField 
+            label="Tone / Mood" 
+            value={prompt.frame.tone} 
+            onChange={handleFrameChange('tone')} 
+            placeholder="e.g., Satirical, Humorous, Epic" 
+            tooltip="Comma-separated tags describing the mood or feeling (e.g., 'Epic, Somber, Mysterious')."
+          />
         </div>
 
         <div className="space-y-4">
@@ -89,8 +102,20 @@ export const StructuredBreakdown: React.FC<StructuredBreakdownProps> = ({ prompt
           {prompt.scene.subjects.map((subject, index) => (
             <div key={index} className="p-3 border border-gray-700 rounded-md space-y-3 relative bg-gray-900/50">
               <p className="text-sm font-medium text-gray-400">Subject {index + 1}</p>
-              <InputField label="Main Subject" value={subject.name} onChange={handleSubjectChange(index, 'name')} placeholder="e.g., Donald Trump, a robot" />
-              <InputField label="...as / with Attribute" value={subject.attribute} onChange={handleSubjectChange(index, 'attribute')} placeholder="e.g., as a petulant child" />
+              <InputField 
+                label="Main Subject" 
+                value={subject.name} 
+                onChange={handleSubjectChange(index, 'name')} 
+                placeholder="e.g., Donald Trump, a robot" 
+                tooltip="The primary character, creature, or object in your scene."
+              />
+              <InputField 
+                label="...as / with Attribute" 
+                value={subject.attribute} 
+                onChange={handleSubjectChange(index, 'attribute')} 
+                placeholder="e.g., as a petulant child" 
+                tooltip="Describes the subject's appearance, role, or what it's doing (e.g., 'wearing a spacesuit', 'as a giant')."
+              />
               {prompt.scene.subjects.length > 1 && (
                 <button onClick={() => removeSubject(index)} className="absolute top-2 right-2 text-gray-500 hover:text-red-400">
                   <TrashIcon />
@@ -102,13 +127,31 @@ export const StructuredBreakdown: React.FC<StructuredBreakdownProps> = ({ prompt
             <PlusIcon />
             <span>Add Subject</span>
           </button>
-          <InputField label="Action / Process" value={prompt.scene.action} onChange={handleSceneChange('action')} placeholder="e.g., is disciplining, sits on" />
+          <InputField 
+            label="Action / Process" 
+            value={prompt.scene.action} 
+            onChange={handleSceneChange('action')} 
+            placeholder="e.g., is disciplining, sits on"
+            tooltip="The main action connecting the subjects to the context (e.g., 'is discovering', 'sits on')."
+          />
         </div>
 
         <div className="space-y-4">
           <h3 className="text-base font-semibold text-gray-300">CONTEXT</h3>
-          <InputField label="Setting / Location" value={prompt.context.setting} onChange={handleContextChange('setting')} placeholder="e.g., on the White House lawn" />
-          <InputField label="Key Objects / Details" value={prompt.context.details} onChange={handleContextChange('details')} placeholder="e.g., a broken gavel, lens flare" />
+          <InputField 
+            label="Setting / Location" 
+            value={prompt.context.setting} 
+            onChange={handleContextChange('setting')} 
+            placeholder="e.g., on the White House lawn"
+            tooltip="The environment or location where the scene takes place."
+          />
+          <InputField 
+            label="Key Objects / Details" 
+            value={prompt.context.details} 
+            onChange={handleContextChange('details')} 
+            placeholder="e.g., a broken gavel, lens flare"
+            tooltip="Comma-separated list of important objects, lighting, or camera details (e.g., 'glowing crystals, lens flare, volumetric lighting')."
+          />
         </div>
       </div>
     </details>

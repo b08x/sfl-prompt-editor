@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { CanvasPanel } from './components/CanvasPanel';
 import { HistoryFilmstrip } from './components/HistoryFilmstrip';
 import { StructuredBreakdown } from './components/StructuredEditor';
@@ -7,7 +7,7 @@ import { SavedPromptsPanel } from './components/SavedPromptsPanel';
 import { VariationsPanel } from './components/VariationsPanel';
 import { StructuredPrompt, GenerationHistoryItem, AnalysisTag, RewriteCandidate, SavedPromptItem, PromptVariation } from './types';
 import { generateImage, deconstructPrompt, analyzeAndRewritePrompt, generatePromptVariations } from './services/geminiService';
-import { SparklesIcon, BookmarkIcon, BeakerIcon } from './components/icons';
+import { SparklesIcon, BookmarkIcon, BeakerIcon, ShareIcon } from './components/icons';
 import { useHistoryState } from './hooks/useHistoryState';
 import { useLocalStorage } from './hooks/useLocalStorage';
 
@@ -61,16 +61,21 @@ function App() {
   const [variations, setVariations] = useState<PromptVariation[]>([]);
   const [isGeneratingVariations, setIsGeneratingVariations] = useState<boolean>(false);
 
+  const [isShareOpen, setIsShareOpen] = useState(false);
+  const [copySuccessMessage, setCopySuccessMessage] = useState<string | null>(null);
+  const shareButtonRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
-    const initApp = async () => {
+    const initApp = async (promptToLoad: string) => {
       setIsLoading(true);
       setLoadingMessage("Analyzing...");
       setError(null);
+      setRawPrompt(promptToLoad);
       
       try {
         const [structured, result] = await Promise.all([
-          deconstructPrompt(initialRawPrompt),
-          analyzeAndRewritePrompt(initialRawPrompt)
+          deconstructPrompt(promptToLoad),
+          analyzeAndRewritePrompt(promptToLoad)
         ]);
         resetPromptState(structured);
         setAnalysis(result.analysis);
@@ -85,7 +90,23 @@ function App() {
         setLoadingMessage("Generate");
       }
     };
-    initApp();
+    
+    const hash = window.location.hash;
+    if (hash.startsWith('#prompt=')) {
+        try {
+            const encodedPrompt = hash.substring(8); // Length of '#prompt='
+            const decodedPrompt = atob(encodedPrompt);
+            initApp(decodedPrompt);
+            // Clean up the URL to avoid reloading the same prompt on refresh
+            window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        } catch (e) {
+            console.error("Failed to decode prompt from URL:", e);
+            setError("The shared prompt link is invalid or corrupted.");
+            initApp(initialRawPrompt); // Fallback to default
+        }
+    } else {
+        initApp(initialRawPrompt);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -95,6 +116,25 @@ function App() {
       return () => clearTimeout(timer);
     }
   }, [error]);
+
+  useEffect(() => {
+    if (copySuccessMessage) {
+        const timer = setTimeout(() => setCopySuccessMessage(null), 3000);
+        return () => clearTimeout(timer);
+    }
+  }, [copySuccessMessage]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (shareButtonRef.current && !shareButtonRef.current.contains(event.target as Node)) {
+        setIsShareOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
   
   const handleGenerate = useCallback(async () => {
     const trimmedPrompt = rawPrompt.trim();
@@ -265,6 +305,20 @@ function App() {
     }
   }, [resetPromptState]);
 
+  const handleCopyLink = () => {
+    const encodedPrompt = btoa(rawPrompt);
+    const url = `${window.location.origin}${window.location.pathname}#prompt=${encodedPrompt}`;
+    navigator.clipboard.writeText(url);
+    setCopySuccessMessage("Shareable link copied to clipboard!");
+    setIsShareOpen(false);
+  };
+
+  const handleCopyRawText = () => {
+    navigator.clipboard.writeText(rawPrompt);
+    setCopySuccessMessage("Raw prompt copied to clipboard!");
+    setIsShareOpen(false);
+  };
+
 
   useEffect(() => {
     const constructed = constructRawPrompt(prompt);
@@ -285,6 +339,12 @@ function App() {
       {error && (
         <div className="bg-red-500 text-white p-3 text-center transition-opacity duration-300">
           {error}
+        </div>
+      )}
+
+      {copySuccessMessage && (
+        <div className="fixed bottom-4 right-4 bg-green-600 text-white py-2 px-4 rounded-lg shadow-lg z-50 animate-pulse">
+            {copySuccessMessage}
         </div>
       )}
 
@@ -324,6 +384,32 @@ function App() {
                 >
                     <BookmarkIcon />
                 </button>
+                <div className="relative" ref={shareButtonRef}>
+                    <button
+                        onClick={() => setIsShareOpen(prev => !prev)}
+                        disabled={isLoading}
+                        title="Share Prompt"
+                        className="p-3 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition duration-300 disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed"
+                    >
+                        <ShareIcon />
+                    </button>
+                    {isShareOpen && (
+                        <div className="absolute right-0 bottom-full mb-2 w-56 bg-gray-700 rounded-lg shadow-xl z-20 border border-gray-600">
+                            <button
+                                onClick={handleCopyLink}
+                                className="block w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-indigo-600 rounded-t-lg"
+                            >
+                                Copy Shareable Link
+                            </button>
+                            <button
+                                onClick={handleCopyRawText}
+                                className="block w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-indigo-600 rounded-b-lg"
+                            >
+                                Copy Raw Prompt
+                            </button>
+                        </div>
+                    )}
+                </div>
             </div>
           </div>
           
